@@ -1,0 +1,28 @@
+artifact-type: application/vnd.delivery-station.plugin.index.v1+json
+annotations:
+  name: s3
+  version: 0.1.0
+  description: Delivery Station plugin for uploading artifacts to S3-compatible buckets.
+  url: https://github.com/delivery-station/ds-s3
+  org.opencontainers.image.source: https://github.com/delivery-station/ds-s3
+  vendor: Kharkevich Engineering Lab
+  license: MIT
+manifests:
+  - platform: linux/amd64
+    path: bin/linux/amd64/ds-s3
+    mediaType: application/vnd.delivery-station.plugin.v1+binary
+  - platform: linux/arm64
+    path: bin/linux/arm64/ds-s3
+    mediaType: application/vnd.delivery-station.plugin.v1+binary
+  - platform: darwin/amd64
+    path: bin/darwin/amd64/ds-s3
+    mediaType: application/vnd.delivery-station.plugin.v1+binary
+  - platform: darwin/arm64
+    path: bin/darwin/arm64/ds-s3
+    mediaType: application/vnd.delivery-station.plugin.v1+binary
+  - platform: windows/amd64
+    path: bin/windows/amd64/ds-s3.exe
+    mediaType: application/vnd.delivery-station.plugin.v1+binary
+  - platform: windows/arm64
+    path: bin/windows/arm64/ds-s3.exe
+    mediaType: application/vnd.delivery-station.plugin.v1+binary

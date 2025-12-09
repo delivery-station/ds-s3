@@ -1,0 +1,27 @@
+{
+    "branches": [
+        {
+            "name": "main"
+        }
+    ],
+    "ci": true,
+    "dryRun": false,
+    "plugins": [
+        "@semantic-release/commit-analyzer",
+        "@semantic-release/release-notes-generator",
+        [
+            "@semantic-release/exec",
+            {
+                "prepareCmd": "VERSION=${nextRelease.version} make test release-build-all",
+                "publishCmd": "ds porter push ghcr.io/delivery-station/ds-s3:${nextRelease.version} --manifest=ds.manifest.yaml"
+            }
+        ],
+        [
+            "@semantic-release/github",
+            {
+                "successComment": false,
+                "addReleases": "top"
+            }
+        ]
+    ]
+}

@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    name: Build and Publish Porter Plugin
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+
+      - name: Install Delivery Station CLI with Porter plugin
+        uses: delivery-station/setup-ds-action@v1
+        with:
+          plugins: ds-porter
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config: |
+            auth:
+              credentials:
+                - registry: ghcr.io
+                  username: ${{ github.actor }}
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Semantic Release
+        uses: cycjimmy/semantic-release-action@v6
+        with:
+          extra_plugins: |
+            @semantic-release/exec
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
