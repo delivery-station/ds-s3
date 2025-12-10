@@ -15,6 +15,8 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0
 )
 
+replace github.com/delivery-station/ds => ../ds
+
 require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.4 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.16 // indirect

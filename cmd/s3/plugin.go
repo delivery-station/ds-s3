@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -40,12 +38,16 @@ func NewPlugin(logger hclog.Logger, version, commit, date string) *Plugin {
 	}
 }
 
-func (p *Plugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
-	return &types.PluginMetadata{
+func (p *Plugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
+	return &types.PluginManifest{
 		Name:        "s3",
 		Version:     p.version,
 		Description: "Upload artifacts to S3-compatible storage",
-		Operations:  []string{"upload", "help", "version"},
+		Commands: []types.PluginCommand{
+			{Name: "upload", Description: "Upload artifacts to an S3 bucket"},
+			{Name: "help", Description: "Show usage information"},
+			{Name: "version", Description: "Display plugin version information"},
+		},
 		Platform: types.PluginPlatform{
 			OS:   []string{"linux", "darwin", "windows"},
 			Arch: []string{"amd64", "arm64"},
@@ -73,9 +75,11 @@ func (p *Plugin) Execute(ctx context.Context, operation string, args []string, e
 		}
 	}
 
+	parsedArgs := types.NewPluginArgs(args)
+
 	switch operation {
 	case "upload":
-		return p.handleUpload(ctx, cfg, args)
+		return p.handleUpload(ctx, cfg, parsedArgs)
 	case "help":
 		return &types.ExecutionResult{
 			Stdout:   uploadUsage(),
@@ -164,38 +168,42 @@ func (p *Plugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
 	}, nil
 }
 
-func (p *Plugin) handleUpload(ctx context.Context, baseCfg *config.Config, args []string) (*types.ExecutionResult, error) {
-	if len(args) > 0 {
-		first := strings.TrimSpace(args[0])
-		if first == "-h" || first == "--help" || first == "help" {
-			return &types.ExecutionResult{Stdout: uploadUsage(), ExitCode: 0}, nil
-		}
-	}
-
-	fs := flag.NewFlagSet("upload", flag.ContinueOnError)
-	var buf bytes.Buffer
-	fs.SetOutput(&buf)
-	fs.Usage = func() {
-		buf.WriteString(uploadUsage())
-	}
-
-	bucket := fs.String("bucket", "", "Target S3 bucket")
-	region := fs.String("region", "", "AWS region to use")
-	contextPath := fs.String("context", "", "Context path/prefix to apply")
-	cleanup := fs.Bool("cleanup", baseCfg.Cleanup, "Remove existing objects before upload")
-	overwrite := fs.Bool("overwrite", baseCfg.Overwrite, "Overwrite objects when they already exist")
-	endpoint := fs.String("endpoint", "", "Custom S3-compatible endpoint URL")
-	forcePathStyle := fs.Bool("force-path-style", baseCfg.ForcePathStyle, "Force path-style addressing")
-	skipTLSVerify := fs.Bool("skip-tls-verify", baseCfg.SkipTLSVerify, "Disable TLS certificate verification")
-	profile := fs.String("profile", "", "Shared credentials profile to load")
-
-	if err := fs.Parse(args); err != nil {
-		return &types.ExecutionResult{ExitCode: 1, Stderr: buf.String(), Error: err.Error()}, nil
+func (p *Plugin) handleUpload(ctx context.Context, baseCfg *config.Config, args types.PluginArgs) (*types.ExecutionResult, error) {
+	if help, ok := args.BoolAny("help", "h"); ok && help {
+		return &types.ExecutionResult{Stdout: uploadUsage(), ExitCode: 0}, nil
 	}
 
 	merged := baseCfg.Clone()
 
-	sources := fs.Args()
+	if bucket, ok := args.First("bucket"); ok && strings.TrimSpace(bucket) != "" {
+		merged.Bucket = strings.TrimSpace(bucket)
+	}
+	if region, ok := args.First("region"); ok && strings.TrimSpace(region) != "" {
+		merged.Region = strings.TrimSpace(region)
+	}
+	if contextPath, ok := args.FirstAny("context", "context-path"); ok && strings.TrimSpace(contextPath) != "" {
+		merged.ContextPath = strings.Trim(strings.TrimSpace(contextPath), "/")
+	}
+	if endpoint, ok := args.First("endpoint"); ok && strings.TrimSpace(endpoint) != "" {
+		merged.Endpoint = strings.TrimSpace(endpoint)
+	}
+	if profile, ok := args.First("profile"); ok && strings.TrimSpace(profile) != "" {
+		merged.Profile = strings.TrimSpace(profile)
+	}
+	if cleanup, ok := args.Bool("cleanup"); ok {
+		merged.Cleanup = cleanup
+	}
+	if overwrite, ok := args.Bool("overwrite"); ok {
+		merged.Overwrite = overwrite
+	}
+	if forcePathStyle, ok := args.BoolAny("force-path-style"); ok {
+		merged.ForcePathStyle = forcePathStyle
+	}
+	if skipTLSVerify, ok := args.BoolAny("skip-tls-verify"); ok {
+		merged.SkipTLSVerify = skipTLSVerify
+	}
+
+	sources := trimmedArgs(args.Positionals())
 	if len(sources) == 0 {
 		sources = append([]string{}, merged.Sources...)
 	}
@@ -203,25 +211,6 @@ func (p *Plugin) handleUpload(ctx context.Context, baseCfg *config.Config, args 
 		err := fmt.Errorf("at least one source path is required (provide CLI paths or configure sources)")
 		return &types.ExecutionResult{ExitCode: 1, Stderr: uploadUsage(), Error: err.Error()}, nil
 	}
-	if *bucket != "" {
-		merged.Bucket = *bucket
-	}
-	if *region != "" {
-		merged.Region = *region
-	}
-	if *contextPath != "" {
-		merged.ContextPath = strings.Trim(*contextPath, "/")
-	}
-	if *endpoint != "" {
-		merged.Endpoint = *endpoint
-	}
-	if *profile != "" {
-		merged.Profile = *profile
-	}
-	merged.Cleanup = *cleanup
-	merged.Overwrite = *overwrite
-	merged.ForcePathStyle = *forcePathStyle
-	merged.SkipTLSVerify = *skipTLSVerify
 
 	if err := merged.Validate(); err != nil {
 		return &types.ExecutionResult{ExitCode: 1, Error: err.Error()}, nil
@@ -336,6 +325,20 @@ Flags:
   --skip-tls-verify          Disable TLS verification (requires --endpoint)
   --profile <name>           Shared AWS profile to use
 `
+}
+
+func trimmedArgs(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 type uploadSummary struct {
