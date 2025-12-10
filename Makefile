@@ -55,10 +55,18 @@ fmt:
 	$(GOFMT) ./...
 
 lint:
+	@echo "Running go fmt..."
+	$(GOFMT) ./...
+	@echo "Running go vet..."
 	$(GOVET) ./...
+	@echo "Checking go mod tidy..."
+	$(GOMOD) tidy
+	golangci-lint run
+	@git diff --exit-code go.mod go.sum || (echo "go.mod or go.sum needs updating" && exit 1)
 
 test:
-	$(GOTEST) ./...
+	@echo "Running unit tests..."
+	$(GOTEST) -v -race -short -coverprofile=coverage.out ./...
 
 tidy:
 	$(GOMOD) tidy
