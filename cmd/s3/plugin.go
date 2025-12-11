@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -38,8 +37,8 @@ func NewPlugin(logger hclog.Logger, version, commit, date string) *Plugin {
 	}
 }
 
-func (p *Plugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
-	return &types.PluginManifest{
+func (p *Plugin) GetManifest(ctx context.Context) (*types.PluginInfo, error) {
+	return &types.PluginInfo{
 		Name:        "s3",
 		Version:     p.version,
 		Description: "Upload artifacts to S3-compatible storage",
@@ -55,14 +54,7 @@ func (p *Plugin) GetManifest(ctx context.Context) (*types.PluginManifest, error)
 	}, nil
 }
 
-func (p *Plugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
-	// Adopt environment variables passed by DS
-	for k, v := range env {
-		if err := os.Setenv(k, v); err != nil {
-			return &types.ExecutionResult{ExitCode: 1, Error: fmt.Sprintf("failed to set environment variable %s: %v", k, err)}, nil
-		}
-	}
-
+func (p *Plugin) Execute(ctx context.Context, operation string, args []string) (*types.ExecutionResult, error) {
 	cfg, err := config.LoadFromHost(ctx, p.logger)
 	if err != nil {
 		p.logger.Error("Failed to load configuration from host", "error", err)
